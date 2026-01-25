@@ -32,8 +32,8 @@ Since real-world "ground truth" for covert vessels is virtually non-existent, I 
 
 * **Language:** Python 3.10+
 * **Computer Vision:** PyTorch, YOLOv8
-* **Data Science:** NumPy, SciPy, Pandas
-* **Geospatial:** GeoPandas, Shapely, PyProj (for coordinate transformations)
+* **Data Science:** NumPy, Pandas
+* **Geospatial:** Shapely
 * **Simulation:** Custom-built synthetic trajectory engine
 
 ## 📊 Pipeline Overview
@@ -43,10 +43,6 @@ Since real-world "ground truth" for covert vessels is virtually non-existent, I 
 3.  **Estimation:** Kalman Filter predicts the expected position of all AIS-transmitting ships at $T_{SAR}$.
 4.  **Association:** The system calculates the likelihood of association. Detections in SAR that cannot be mapped to an AIS track are flagged as **Dark Ships**.
 
-## 📈 Roadmap
-- [ ] **Non-Linear State Estimation:** Upgrade from Linear KF to Unscented Kalman Filter (UKF) for improved tracking in narrow straits.
-- [ ] **Multi-Hypothesis Tracking (MHT):** Improve association accuracy when multiple vessels are in close proximity.
-- [ ] **Batch Processing:** Scalable Dockerized architecture for processing large-scale SAR swaths.
 
 ---
 *Developed as a solution for automated maritime surveillance
