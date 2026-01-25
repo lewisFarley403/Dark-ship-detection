@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Sentinel-2 Downloader</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Leaflet core CSS -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
+
+  <!-- Leaflet Draw plugin CSS -->
+  <link
+    rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"
+  />
+
+  <!-- Your custom CSS -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <div class="container">
+    <h1>🌍 Sentinel-2 Image Fetcher</h1>
+
+    <!-- Controls section -->
+    <div class="controls">
+      <div class="date-group">
+        <label for="start-date">Start Date:</label>
+        <input type="date" id="start-date" required />
+      </div>
+
+      <div class="date-group">
+        <label for="end-date">End Date:</label>
+        <input type="date" id="end-date" required />
+      </div>
+
+      <button id="fetch-btn">Fetch Images</button>
+    </div>
+
+    <!-- Map container -->
+    <div id="map"></div>
+
+    <!-- Output area -->
+    <div id="output"></div>
+  </div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Leaflet Draw plugin JS -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+    <p><time id="datetime">Independence day</time></p>
+  <!-- Your main JS -->
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+  
+</body>
+</html>

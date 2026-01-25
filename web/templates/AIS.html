@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block title %}AIS Visualiser{% endblock %}
+
+{% block head_extra %}
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+{% endblock %}
+
+{% block header_title %}🌍 AIS Visualiser{% endblock %}
+
+{% block controls %}
+  <div class="date-group">
+    <label for="start-date">Start Date:</label>
+<input 
+      type="datetime-local" 
+      id="start-date" 
+      
+      value="2023-06-01T09:00"
+      
+      min="2023-01-01T00:00"
+      
+      max="2024-12-31T23:59"
+      
+      required 
+    />  </div>
+
+
+  <button id="fetch-btn">Get Paths</button>
+{% endblock %}
+
+{%block side_panel%}
+<div id = 'sidepanel' style="display: none !important;">
+  <label for="selector">Selector:</label>
+  <select id = 'selector'>
+    <option value = 'KF'> Kalman Filter</option>
+  </select>
+  <label for="prediction-timestep">prediction timestep</label>
+  <input id = 'prediction-timestep'/>
+  <button id = "predict">Predict</button>
+</div>
+{%endblock%}
+
+{% block output %}
+  <div id="output"></div>
+  <div class="MMSI">
+    <label for="mmsi-search">MMSI Search (Optional)</label>
+    <input 
+      type="text" 
+      id="mmsi-search-input" 
+    />
+    <button id="mmsi-search-button">Search</button>  
+  </div>
+{% endblock %}
+
+{% block scripts_extra %}
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+
+  <script src="{{ url_for('static', filename='js/path_plot.js') }}"></script>
+{% endblock %}
+
+{% block bottom %}
+<div id = 'tbls' style="display: flex; justify-content: space-between; gap: 20px; display:none">
+
+    <table style="width: 48%; border: 1px solid #ccc; font-family: sans-serif;">
+        <thead style="background-color: #f2f2f2;">
+            <tr><th colspan="2" style="padding: 8px;">Vessel Identity (Static)</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>MMSI</td><td id="val-MMSI"></td></tr>
+            <tr><td>IMO</td><td id="val-IMO"></td></tr>
+            <tr><td>Name</td><td id="val-Name"></td></tr>
+            <tr><td>Call Sign</td><td id="val-IRCS"></td></tr>
+            <tr><td>Flag</td><td id="val-Flag"></td></tr>
+            <tr><td>Type</td><td id="val-Type"></td></tr>
+            <tr><td>Length x Width</td><td id="val-Dim"></td></tr> <tr><td>Receiver Offset</td><td id="val-Offset"></td></tr> </tbody>
+    </table>
+
+    <table style="width: 48%; border: 1px solid #ccc; font-family: sans-serif;">
+        <thead style="background-color: #e6f7ff;">
+            <tr><th colspan="2" style="padding: 8px;">Voyage Telemetry (Dynamic)</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>Time (DTG)</td><td id="val-DTG"></td></tr>
+            <tr><td>Position</td><td id="val-Pos"></td></tr> <tr><td>Speed / Course</td><td id="val-SpeedCourse"></td></tr>
+            <tr><td>Status</td><td id="val-Status"></td></tr>
+            <tr><td>Destination</td><td id="val-Destination"></td></tr>
+            <tr><td>ETA</td><td id="val-ETA"></td></tr>
+            <tr><td>Hazardous</td><td id="val-Hazardous"></td></tr>
+        </tbody>
+    </table>
+
+</div>
+{% endblock %}

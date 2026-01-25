@@ -1,0 +1,11 @@
+# 1. The "root" path to your project folder
+path: /Users/lewisfarley/Developer/dissertation/
+
+# 2. The paths to your images relative to the 'path' above
+# (Assuming your folder structure is datasets -> coco_style -> images)
+train: coco_style/images/train
+val: coco_style/images/test
+
+# 3. Classes
+nc: 1
+names: ['ship']

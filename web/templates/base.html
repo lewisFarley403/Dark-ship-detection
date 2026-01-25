@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}Sentinel App{% endblock %}</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
+  {% block head_extra %}{% endblock %}
+</head>
+<body>
+  <div class="container">
+    <h1>{% block header_title %}Map Application{% endblock %}</h1>
+
+    <div class="controls">
+      {% block controls %}{% endblock %}
+    </div>
+
+    <div class="main-layout">
+      <div id="map"></div>
+
+      {% block side_panel %}{% endblock %}
+    </div>
+
+    <div id="output-area">
+      {% block output %}{% endblock %}
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script>
+    // Initialize the map here so it is available globally to child scripts
+    // We attach it to 'window' so child scripts can access 'window.map'
+    var map = L.map('map').setView([53.19, -5.2], 8);
+
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    }).addTo(map);
+    setTimeout(() => map.invalidateSize(), 50);
+  </script>
+
+  {% block scripts_extra %}{% endblock %}
+  {% block bottom %}{% endblock %}
+</body>
+</html>
