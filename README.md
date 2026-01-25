@@ -49,4 +49,4 @@ Since real-world "ground truth" for covert vessels is virtually non-existent, I 
 - [ ] **Batch Processing:** Scalable Dockerized architecture for processing large-scale SAR swaths.
 
 ---
-*Developed as a solution for automated maritime surveillance and sanction enforcement.*
+*Developed as a solution for automated maritime surveillance
