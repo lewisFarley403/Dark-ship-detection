@@ -1,0 +1,45 @@
+# --- Python & Environment ---
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+.env
+
+# --- Jupyter Notebooks ---
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+
+# --- Data & Large Assets (Crucial for AIS/YOLO) ---
+# Ignore the raw datasets to avoid hitting GitHub file limits
+AIS/
+SSDD_coco/
+coco_style/
+mds/
+cache/
+
+# Ignore specific large files or temporary dumps
+*.xlsx
+*.pkl
+*.bib
+*.pt
+*.csv
+# If you want to keep your final weights, comment out the line above and use:
+# weights/!best.pt
+
+# --- YOLO/Training Outputs ---
+# These folders get messy very fast
+runs/
+latest.pt
+last.pt
+
+# --- OS Specific ---
+.DS_Store
+Thumbs.db
+
+# --- Dissertation/Research Junk ---
+dump.pkl
+Book1.xlsx
+gantt.xlsx
+*.log
