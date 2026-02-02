@@ -1,18 +1,27 @@
 from ultralytics import YOLO
+import sys
+from pathlib import Path
 
-def main():
-    # 1. Load the weights from your COMPLETED run
-    # (We use 'last.pt' so we don't lose the progress from the end of the run)
-    model = YOLO('runs/detect/yolo_small_dataset_run12/weights/last.pt')
+def main(run_name):
+    project_root = Path(__file__).resolve().parent.parent 
+    
+    # 2. Construct the full path to the weights file
+    # This assumes standard YOLO structure: runs/detect/<name>/weights/last.pt
+    weights_path = project_root / 'runs' / 'detect' / run_name / 'weights' / 'last.pt'
+    model = YOLO(weights_path)
+    current_dir = Path(__file__).resolve().parent
+
+    # 2. Point to the file inside that same folder
+    yaml_path = current_dir / "data.yaml"
 
     # 2. Start a NEW training session
     # We do NOT use resume=True. We just treat this as a new run with pre-trained weights.
     results = model.train(
-        data='./data.yaml',
+        data=yaml_path,
         epochs=100,        # This means "train for 100 MORE epochs"
         imgsz=640,
         batch=16,
-        device='mps',      # or 'mps'/'cpu'
+        device='cuda',      # or 'mps'/'cpu'
         
         # Optional: You might want to lower the learning rate slightly since
         # the model is already partially trained, but since your graphs were 
@@ -22,4 +31,5 @@ def main():
     )
 
 if __name__ == '__main__':
-    main()
+    name = sys.argv[1]
+    main(name)

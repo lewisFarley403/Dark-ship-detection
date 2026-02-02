@@ -1,13 +1,17 @@
 from ultralytics import YOLO
 import torch
 import sys
-
+from pathlib import Path
 # --- Main Training Function ---
 def main():
     """
     This script trains a YOLOv8 object detection model on a custom dataset.
     All key hyperparameters are exposed for easy tuning.
     """
+    current_dir = Path(__file__).resolve().parent
+
+    # 2. Point to the file inside that same folder
+    yaml_path = current_dir / "data.yaml"
     # Check for available hardware accelerators (CUDA, MPS, or CPU)
     if torch.cuda.is_available():
         device = 'cuda'
@@ -27,7 +31,7 @@ def main():
     try:
         results = model.train(
             # --- Essential Parameters ---
-            data='./data.yaml',         # Path to your dataset configuration file
+            data=yaml_path,         # Path to your dataset configuration file
             epochs=100,               # Total number of training epochs
             imgsz=640,                # Input image size
             device=device,            # Device to run on (auto-detected)

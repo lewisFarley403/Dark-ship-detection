@@ -9,6 +9,7 @@ import pandas as pd
 import numpy as np
 
 from .models import Track
+from .utils import get_data_path
 
 
 
@@ -26,7 +27,7 @@ class AISPage:
         '''
         current_file_dir = Path(__file__).resolve().parent
         
-        self.AIS_DATA_PATH = current_file_dir.parent / 'data' / 'AIS'
+        self.AIS_DATA_PATH = get_data_path() / 'AIS'
         self.headers = self.get_headers()
         self.datetime = datetime
         self.csv_path = self.get_csv_dir()
@@ -117,7 +118,7 @@ class AISPage:
         
         :param bbox: A tuple (min_lon, min_lat, max_lon, max_lat)
         '''
-        min_lon, min_lat, max_lon, max_lat = bbox
+        min_lon, min_lat, max_lon, max_lat,_,_ = bbox
         self.full_ais_df = self.full_ais_df[
             (self.full_ais_df['Lon'] >= min_lon) &
             (self.full_ais_df['Lon'] <= max_lon) &
@@ -147,3 +148,5 @@ class AISPage:
             (self.full_ais_df['DTG'] <= end)
         ]
         return self  # Allow chaining
+    def __len__(self):
+        return self.full_ais_df.size

@@ -1,5 +1,6 @@
 # 1. The "root" path to your project folder
-path: /Users/lewisfarley/Developer/dissertation/
+# path: /Users/lewisfarley/Developer/dissertation/
+path: /scratch/lf507/dissertation/data
 
 # 2. The paths to your images relative to the 'path' above
 # (Assuming your folder structure is datasets -> coco_style -> images)

@@ -443,7 +443,7 @@ def get_image_AIS_pairs(target_bbox,start:datetime, end:datetime,is_optical = Fa
         # print('bbox')
         # print(satallite)
         bbox = satallite['bbox']
-        bbox_obj = box(*bbox)
+        bbox_obj = box(*(bbox[:4]))
         # print(bbox)
         img = satallite['img']
         str_date = (satallite['date'])
