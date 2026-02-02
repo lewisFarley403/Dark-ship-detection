@@ -9,9 +9,9 @@ def load_sentinel_creds():
     
     SH_CLIENT_ID = os.getenv("SH_CLIENT_ID")
     SH_CLIENT_SECRET = os.getenv("SH_CLIENT_SECRET")
-
+    INSTANCE_ID = os.getenv('INSTANCE_ID')
     
-    if not SH_CLIENT_ID or not SH_CLIENT_SECRET:
+    if not SH_CLIENT_ID or not SH_CLIENT_SECRET or not INSTANCE_ID:
         raise ValueError("Sentinel Hub credentials missing from .env file!")
-    return SH_CLIENT_ID, SH_CLIENT_SECRET
+    return SH_CLIENT_ID, SH_CLIENT_SECRET,INSTANCE_ID
 

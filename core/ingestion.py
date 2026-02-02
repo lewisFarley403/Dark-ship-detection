@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from datetime import datetime as dt
 from typing import Sequence
+# from matplotlib.path import Path as MplPath
 import pandas as pd
 import numpy as np
+
+from .models import Track
 
 
 
@@ -20,7 +24,9 @@ class AISPage:
         :param datetime: The datetime of the AIS data to load
         :type datetime: dt object
         '''
-        self.AIS_DATA_PATH='./AIS'
+        current_file_dir = Path(__file__).resolve().parent
+        
+        self.AIS_DATA_PATH = current_file_dir.parent / 'data' / 'AIS'
         self.headers = self.get_headers()
         self.datetime = datetime
         self.csv_path = self.get_csv_dir()
@@ -57,7 +63,7 @@ class AISPage:
         Opens and reads the AIS headers from the Headers.txt file.
         
         :return: List of AIS data headers'''
-        with open(f'{self.AIS_DATA_PATH}/Headers.txt') as f:
+        with open(self.AIS_DATA_PATH/ "Headers.txt") as f:
             txt = f.read()
         return txt.split(',')
     def get_csv_dir(self):

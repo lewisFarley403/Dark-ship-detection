@@ -18,6 +18,8 @@ SSDD_coco/
 coco_style/
 mds/
 cache/
+data/
+research/
 
 # Ignore specific large files or temporary dumps
 *.xlsx
