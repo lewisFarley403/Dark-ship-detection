@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+</head>
+<body>
+    <h1>Training Runs</h1>
+    <select id="run-select">
+        {% for run in runs %}
+            <option value="{{ run }}">{{ run }}</option>
+        {% endfor %}
+    </select>
+    <div style="width: 800px; height: 400px;">
+        <canvas id="liveChart"></canvas>
+    </div>
+    <script src="{{ url_for('static', filename='js/train.js') }}"></script>
+</body>
+</html>
