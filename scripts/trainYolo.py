@@ -2,6 +2,8 @@ from ultralytics import YOLO
 import torch
 import sys
 from pathlib import Path
+
+import yaml
 # --- Main Training Function ---
 def main():
     """
@@ -9,11 +11,13 @@ def main():
     All key hyperparameters are exposed for easy tuning.
     """
     current_dir = Path(__file__).resolve().parent
+    parent_dir = current_dir.parent
 
     # 2. Point to the file inside that same folder
     yaml_path = current_dir / "data.yaml"
     # Check for available hardware accelerators (CUDA, MPS, or CPU)
     if torch.cuda.is_available():
+        print("CUDA is available. Using GPU for training.")
         device = 'cuda'
     elif sys.platform == 'darwin' and torch.backends.mps.is_available():
         # Check for Apple Metal Performance Shaders (MPS) on macOS
@@ -21,6 +25,8 @@ def main():
     else:
         device = 'cpu'
     print(f"Using device: {device}")
+    with open(parent_dir/'runs/detect/tune/best_hyperparameters.yaml', 'r') as f:
+        best_hps = yaml.safe_load(f)
 
     # 1. Load a pre-trained model
     # 'yolov8n.pt' is the smallest and fastest model.
@@ -32,35 +38,15 @@ def main():
         results = model.train(
             # --- Essential Parameters ---
             data=yaml_path,         # Path to your dataset configuration file
-            epochs=100,               # Total number of training epochs
+            epochs=200,               # Total number of training epochs
             imgsz=640,                # Input image size
             device=device,            # Device to run on (auto-detected)
             batch=16,                 # Number of images per batch (-1 for auto-batch)
-            name='yolo_final_run', # Renamed for clarity
+            name='good_hp_run', # Renamed for clarity
             workers = 0,
-
+            patience = 50,
             # --- Optimization Hyperparameters ---
-            optimizer='Adam',       # Adam can sometimes perform better on smaller datasets
-            lr0=0.005,              # A slightly lower learning rate can help prevent overfitting
-            lrf=0.01,               # Final learning rate factor (final_lr = lr0 * lrf)
-            momentum=0.937,         # SGD momentum/Adam beta1
-            weight_decay=0.0005,    # Optimizer weight decay
-
-            # --- AGGRESSIVE AUGMENTATION for Small Datasets ---
-            degrees=15.0,           # Increased image rotation (+/- 15 deg)
-            translate=0.1,          # Image translation (+/- fraction)
-            scale=0.6,              # Increased image scale (+/- gain)
-            shear=2.0,              # Added image shear (+/- 2 deg)
-            perspective=0.001,      # Added slight image perspective
-            flipud=0.3,             # Added up-down flip (30% chance), useful for aerial/satellite images
-            fliplr=0.5,             # Image flip left-right (probability)
-            mosaic=1.0,             # Mosaic augmentation is highly recommended for small datasets
-            mixup=0.1,              # Added MixUp augmentation (10% chance) as a strong regularizer
-
-            # --- Training Strategy ---
-            patience=30,            # Stop a bit earlier if no improvement to prevent overfitting
-            warmup_epochs=3.0,      # Number of warmup epochs (can be a fraction)
-            close_mosaic=10         # Disable mosaic augmentation for the last N epochs
+            **best_hps  # Unpack the best hyperparameters from the YAML file
         )
         print("Training completed successfully.")
         print(f"Results saved to: {results.save_dir}")

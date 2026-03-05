@@ -20,7 +20,8 @@ mds/
 cache/
 data/
 research/
-
+models/
+runs/
 # Ignore specific large files or temporary dumps
 *.xlsx
 *.pkl
