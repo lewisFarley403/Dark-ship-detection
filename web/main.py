@@ -16,6 +16,7 @@ from core.ingestion import AISPage
 from pathlib import Path
 current_dir = Path(__file__).resolve().parent
 parent_dir = current_dir.parent
+from core.sentinel_downloader import get_true_color_image
 
 
 
@@ -75,44 +76,44 @@ def predict_course():
     
 
 
-# @app.route("/api/get_images", methods=["POST"])
-# def get_images():
-#     '''Fetch satellite images for a specified bounding box and date range.
-#     Expects a JSON payload with 'bbox', 'start_date', and 'end_date' keys in a POST request.
-#     :return: JSON response containing image metadata or error message
-#     '''
-        #TODO re-enable this endpoint
-#     data = request.get_json()
-#     bbox = data["bbox"]
-#     start_date = datetime.fromisoformat(data["start_date"])
-#     end_date = datetime.fromisoformat(data["end_date"])
+@app.route("/api/get_images", methods=["POST"])
+def get_images():
+    '''Fetch satellite images for a specified bounding box and date range.
+    Expects a JSON payload with 'bbox', 'start_date', and 'end_date' keys in a POST request.
+    :return: JSON response containing image metadata or error message
+    '''
+    # TODO re-enable this endpoint
+    data = request.get_json()
+    bbox = data["bbox"]
+    start_date = datetime.fromisoformat(data["start_date"])
+    end_date = datetime.fromisoformat(data["end_date"])
 
-#     # Correctly parse the bounding box from the request
-#     min_lon = min(point[1] for point in bbox)
-#     max_lon = max(point[1] for point in bbox)
-#     min_lat = min(point[0] for point in bbox)
-#     max_lat = max(point[0] for point in bbox)
-#     bbox_list = [min_lon, min_lat, max_lon, max_lat]
+    # Correctly parse the bounding box from the request
+    min_lon = min(point[1] for point in bbox)
+    max_lon = max(point[1] for point in bbox)
+    min_lat = min(point[0] for point in bbox)
+    max_lat = max(point[0] for point in bbox)
+    bbox_list = [min_lon, min_lat, max_lon, max_lat]
     
-#     print(f"🌍 Received BBox request for: {bbox_list}")
+    print(f"🌍 Received BBox request for: {bbox_list}")
 
-#     s2 = Sentinel2Downloader(bbox_list, cache_folder=CACHE_FOLDER)
+    s2 = Sentinel2Downloader(bbox_list, cache_folder=CACHE_FOLDER)
 
-#     # This now calls the method that downloads and merges a full mosaic
-#     img_data = s2.get_large_area_images(start_date=start_date, end_date=end_date)
+    # This now calls the method that downloads and merges a full mosaic
+    img_data = s2.get_large_area_images(start_date=start_date, end_date=end_date)
     
-#     if not img_data:
-#         return jsonify({"message": "No images could be generated for the selected area and date."}), 404
+    if not img_data:
+        return jsonify({"message": "No images could be generated for the selected area and date."}), 404
 
-#     info = img_data["info"]
-#     return jsonify({
-#         "message": "Image mosaic fetched successfully",
-#         "img_data": [{
-#             "id": info["id"],
-#             "bbox": info["bbox"],
-#             "meta": info, # contains datetime, etc.
-#         }]
-#     })
+    info = img_data["info"]
+    return jsonify({
+        "message": "Image mosaic fetched successfully",
+        "img_data": [{
+            "id": info["id"],
+            "bbox": info["bbox"],
+            "meta": info, # contains datetime, etc.
+        }]
+    })
 
 # In app.py
 

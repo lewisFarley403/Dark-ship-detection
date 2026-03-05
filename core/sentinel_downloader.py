@@ -32,21 +32,51 @@ optical_eval = """
         return [2.5 * sample.B04, 2.5 * sample.B03, 2.5 * sample.B02];
     }
 """
+# SAR_eval = '''
+#     // VERSION: 3
+#     function setup() {
+#     return {
+#         input: ["VV", "VH"],
+#         output: { bands: 2, sampleType: "FLOAT32" }
+#     };
+#     }
+
+#     function evaluatePixel(sample) {
+#     const vv = 10 * Math.log10(sample.VV+0.0001);
+#     const vh = 10 * Math.log10(sample.VH+0.0001);
+#     return [vv, vh];
+#     }
+#         '''
+
 SAR_eval = '''
     // VERSION: 3
     function setup() {
     return {
-        input: ["VV", "VH"],
-        output: { bands: 2, sampleType: "FLOAT32" }
+        input: ["VV"], // Only need VV for ship detection usually
+        // 1. Change to AUTO or UINT8 to get 0-255 range
+        output: { bands: 3, sampleType: "AUTO" } 
     };
     }
 
     function evaluatePixel(sample) {
-    const vv = 10 * Math.log10(sample.VV);
-    const vh = 10 * Math.log10(sample.VH);
-    return [vv, vh];
+    // 2. Convert to dB
+    let val = 10 * Math.log10(sample.VV + 0.00001);
+    
+    // 3. Clip and Normalize (Map -25dB...0dB to 0...1)
+    const min_db = -25;
+    const max_db = 0;
+    val = (val - min_db) / (max_db - min_db);
+    
+    // 4. Clamp to ensure 0-1 range
+    if (val < 0) val = 0;
+    if (val > 1) val = 1;
+    
+    // 5. Return RGB (Duplicate channels) scaled to 255
+    // Sentinel Hub "AUTO" or "UINT8" expects 0-1 floats or 0-255 ints. 
+    // Returning 0-1 floats with AUTO handles the conversion to 0-255 automatically.
+    return [val, val, val]; 
     }
-        '''
+'''
 def create_sentinel_config():
     config = SHConfig()
     clientid,clientsecret,instance_id = load_sentinel_creds()
