@@ -7,23 +7,7 @@ let coords_clicked = []; // max this at 2
 var fetch_btn = document.getElementById('fetch-btn');
 let date_p = document.getElementById('datetime')
 
-function set_map_img_overlay(data){
-    console.log('DATA')
-    console.log(data)
-    var datetime = data.meta.datetime
-    var bbox = [[data.bbox[1],data.bbox[0]],[data.bbox[3],data.bbox[2]]]
-    console.log(datetime)
-    const dateObj = new Date(datetime);
-    date_p.textContent = dateObj.toLocaleString("en-GB", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    });
-    // date_p.setAttribute('datetime',datetime)
-    
-    const imageUrl = `/api/image_overlay?id=${data.id}`;
-    console.log(bbox)
-    L.imageOverlay(imageUrl, bbox, { opacity: 1 }).addTo(map); 
-}
+
 
 fetch_btn.onclick=()=>{
     const startInput = document.getElementById("start-date");
@@ -39,13 +23,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const fetchBtn = document.getElementById("fetch-btn");
   const output = document.getElementById("output");
 
-  // Initialize Leaflet map
-  
-  // map = L.map("map").setView([50.73, -3.52], 13);
 
-  // L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-  //   attribution: "© OpenStreetMap contributors",
-  // }).addTo(map);
 
   // Add draw controls
   const drawnItems = new L.FeatureGroup();
@@ -98,9 +76,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const data = await res.json();
     console.log('received data ',data)
     output.textContent = data.message || "Done!";
-    var first = data.img_data[0]
+    console.log(data)
 
-    set_map_img_overlay(first)
+
+    set_map_img_overlay(data)
   });
     //add shaded area to map
 
@@ -119,12 +98,83 @@ document.addEventListener("DOMContentLoaded", () => {
         .bindPopup(`Lat: ${lat.toFixed(5)}, Lng: ${lng.toFixed(5)}`)
         .openPopup();
         L.rectangle(coords_clicked, {
-        color: "#0078d7",     // border color
+        // color: "#0078d7",     // border color
         weight: 2,            // border thickness
-        fillColor: "#0078d7", // fill color
-        fillOpacity: 0.3      // transparency (0–1)
+        // fillColor: "#0078d7", // fill color
+        fillOpacity: 0      // transparency (0–1)
         }).addTo(map);
         console.log(coords_clicked.length)
         }
   });
 });
+function set_map_img_overlay(data) {
+    if (!data || !data.tiles || data.tiles.length === 0) {
+        console.error("No image tiles found.");
+        return;
+    }
+
+
+    if (drawnLayer && map.hasLayer(drawnLayer)) {
+        map.removeLayer(drawnLayer);
+    }
+
+    if (data.timestamp && date_p) {
+        date_p.textContent = `Scene Date: ${new Date(data.timestamp).toLocaleString()}`;
+    }
+
+    data.tiles.forEach(tile => {
+        const imageUrl = tile.image_url;
+        const bounds = tile.leaflet_bounds;
+
+        const overlay = L.imageOverlay(imageUrl, bounds, {
+            opacity: 1.0,
+            interactive: true,
+            alt: `Satellite Tile ${tile.row}_${tile.col}`,
+            // 2. APPLY GRAYSCALE VIA CSS
+            className: 'grayscale-satellite' 
+        }).addTo(map);
+
+        overlay.bringToFront();
+    });
+    console.log(data.pings)
+    if (data.pings && Array.isArray(data.pings)) {
+        data.pings.forEach(info => {
+            // Leaflet expects [lat, lng]. 
+            // If your data is [lng, lat], use: [coord[1], coord[0]]
+            const latLng = info.coord; 
+
+
+            L.circleMarker(latLng, {
+                radius: 6,
+                fillColor: "#ff3388", // Bright pink/red to pop against grayscale
+                color: "#fff",        // White border
+                weight: 1,
+                opacity: 1,
+                fillOpacity: 0.8
+            })
+            .addTo(map)
+            .bindPopup(`Coordinate: ${latLng[0].toFixed(4)}, ${latLng[1].toFixed(4)}`);
+        });
+    }
+      if (data.ai_pings && Array.isArray(data.ai_pings)) {
+        data.ai_pings.forEach(info => {
+            // Leaflet expects [lat, lng]. 
+            // If your data is [lng, lat], use: [coord[1], coord[0]]
+            const latLng = info; 
+
+
+            L.circleMarker(latLng, {
+                radius: 6,
+                fillColor: "#00FF00", // Bright pink/red to pop against grayscale
+                color: "#fff",        // White border
+                weight: 1,
+                opacity: 1,
+                fillOpacity: 0.8
+            })
+            .addTo(map)
+            .bindPopup(`Coordinate: ${latLng[0].toFixed(4)}, ${latLng[1].toFixed(4)}`);
+        });
+    }
+    const firstBounds = data.tiles[0].leaflet_bounds;
+    map.fitBounds(firstBounds);
+}

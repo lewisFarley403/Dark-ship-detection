@@ -17,6 +17,7 @@ from sentinelhub import (
     SHConfig,
     bbox_to_dimensions,
 )
+from ultralytics import YOLO
 import cv2
 from shapely.geometry import Point, box
 import numpy as np
@@ -107,9 +108,11 @@ def get_true_color_image(bbox_coords:tuple[float,float,float,float], start_date:
 
     all_results = list(catalog.search(data_collection, bbox=bbox, time=(start_date, end_date)))
     if not all_results: 
+        print('no results')
         return None
     best_scenes = [s for s in all_results if compute_bbox_crossover(bbox_coords, s['bbox']) > min_overlap]
     if not best_scenes: 
+        print('only bad responses')
         return None
     
     # best_scene = best_scenes[0]
@@ -304,8 +307,11 @@ class SentinelScene:
             size=size,
             config=self.config,
         )
-
-        return {'img': request.get_data()[0], 'date': self.metadata["properties"]["datetime"], 'bbox': bbox_coords[:4], 'row':bbox_coords[4],'col':bbox_coords[5]}
+        try:
+            return {'img': request.get_data()[0], 'date': self.metadata["properties"]["datetime"], 'bbox': bbox_coords[:4], 'row':bbox_coords[4],'col':bbox_coords[5]}
+        except IndexError:
+            # there is no row col
+            return {'img': request.get_data()[0], 'date': self.metadata["properties"]["datetime"], 'bbox': bbox_coords[:4], 'row':0,'col':0}
     def stitch(self):
         
         """Stitches the downloaded tiles into a single seamless numpy array."""
@@ -366,7 +372,7 @@ class SentinelScene:
                     subimg_index = i
                     print('plotting in image ',i)
                     break
-                
+
             if subimg_index == None:
                 return None # maybe raise an except
             min_lon, min_lat, max_lon, max_lat = mod_scene.images[subimg_index]['bbox']
@@ -393,7 +399,32 @@ class SentinelScene:
                         thickness=thickness
                     )
         return mod_scene
-            
+    def detect_vessels(self,model:YOLO):
+        coords = []
+        for i,img in enumerate(self.images):
+            max_dim = max(*list(img['img'].shape))
+            results = model.predict(img['img'],imgsz = max_dim,verbose=False)
+            W_LON, S_LAT, E_LON, N_LAT = img['bbox']
+
+            for r in results:
+
+                    img_h, img_w = r.orig_shape 
+                    
+                    for box in r.boxes:
+
+                        px_x, px_y = box.xywh[0][0].item(), box.xywh[0][1].item()
+                        
+
+                        norm_x = px_x / img_w
+                        norm_y = px_y / img_h
+                        
+
+                        obj_lon = W_LON + (norm_x * (E_LON - W_LON))
+                        
+
+                        obj_lat = N_LAT - (norm_y * (N_LAT - S_LAT))
+                        coords.append([obj_lat,obj_lon])
+        return coords
 
     def get_search_bbox(self):
         return self.bbox_coords

@@ -4,20 +4,25 @@ Flask application providing AIS data visualization and path prediction services.
 '''
 import io
 import os
-from datetime import datetime
+from datetime import datetime,timedelta
 
 import numpy as np
 import rasterio
 from flask import Flask, jsonify, render_template, request, send_file
 from PIL import Image
+import pandas as pd 
 
+from .serialisers import SentinelWebSerialiser
 from core.predictors import CVKF
 from core.ingestion import AISPage
+from core.sentinel_downloader import SentinelScene,get_true_color_image,get_image_AIS_pairs
+from core.utils import parse_datetime_to_str
 from pathlib import Path
 current_dir = Path(__file__).resolve().parent
 parent_dir = current_dir.parent
 from core.sentinel_downloader import get_true_color_image
-
+from ultralytics import YOLO
+model = YOLO('./models/runs/detect/good_hp_run2/weights/best.pt')
 
 
 app = Flask(__name__)
@@ -86,34 +91,38 @@ def get_images():
     data = request.get_json()
     bbox = data["bbox"]
     start_date = datetime.fromisoformat(data["start_date"])
-    end_date = datetime.fromisoformat(data["end_date"])
-
-    # Correctly parse the bounding box from the request
     min_lon = min(point[1] for point in bbox)
     max_lon = max(point[1] for point in bbox)
     min_lat = min(point[0] for point in bbox)
     max_lat = max(point[0] for point in bbox)
     bbox_list = [min_lon, min_lat, max_lon, max_lat]
-    
-    print(f"🌍 Received BBox request for: {bbox_list}")
+    end_date = datetime.fromisoformat(data["end_date"])
+    # two_weeks_before = start_date - timedelta(weeks=2)
+    two_weeks_after = parse_datetime_to_str(start_date + timedelta(weeks=2))
+    start_date = parse_datetime_to_str(start_date)
 
-    s2 = Sentinel2Downloader(bbox_list, cache_folder=CACHE_FOLDER)
+    pair = list(get_image_AIS_pairs(bbox_list,start_date,two_weeks_after))[0] # we want the one closest to the start date
+    dt = pd.Timedelta(minutes=59) # time between ais and sat, prolly make adjustable in future
+    target = pd.to_datetime(pair[2])
+    scene = pair[0]
+    scene.download()
+    pair_df = pair[1].get_full_df()
+    rows = pair_df[(pair_df['DTG'] - target).abs()<dt]
+    print(len(rows))
+    mmsis = list(set(rows['MMSI'])) # all unique mmsi
+    pings = []
+    for mmsi in mmsis:
+        msg = rows[rows['MMSI'] == mmsi].iloc[0] # if there is more than 1, they are very close together so it doesnt matter
+        coord = [float(msg['Lat']),float(msg['Lon'])]
+        pings.append({'mmsi':mmsi, 'coord':coord})
+    serialiser = SentinelWebSerialiser('./web/static/img_cache','/static/img_cache')
+    web_payload = serialiser.serialise(scene)
 
-    # This now calls the method that downloads and merges a full mosaic
-    img_data = s2.get_large_area_images(start_date=start_date, end_date=end_date)
-    
-    if not img_data:
-        return jsonify({"message": "No images could be generated for the selected area and date."}), 404
-
-    info = img_data["info"]
-    return jsonify({
-        "message": "Image mosaic fetched successfully",
-        "img_data": [{
-            "id": info["id"],
-            "bbox": info["bbox"],
-            "meta": info, # contains datetime, etc.
-        }]
-    })
+    web_payload['pings'] = pings
+    ai_pings = scene.detect_vessels(model)
+    web_payload['ai_pings']=ai_pings
+    print(f'AI found {len(ai_pings)} vessels')
+    return jsonify(web_payload)
 
 # In app.py
 

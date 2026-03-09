@@ -94,3 +94,7 @@ button:hover {
   margin-top: 1rem;
   font-size: 0.95rem;
 }
+
+.grayscale-satellite {
+    filter: grayscale(100%) contrast(120%);
+}

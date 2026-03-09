@@ -22,6 +22,8 @@ data/
 research/
 models/
 runs/
+web/img_cache 
+# huge amount of data in img_cache
 # Ignore specific large files or temporary dumps
 *.xlsx
 *.pkl

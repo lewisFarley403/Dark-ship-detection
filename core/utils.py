@@ -28,4 +28,6 @@ def get_data_path()->PosixPath:
     if is_relative:
         return root_dir/path
     return Path(path)
+def parse_datetime_to_str(date):
+    return date.strftime('%Y-%m-%d')
 
