@@ -1,24 +1,28 @@
 import datetime
 import math
-from matplotlib.dviread import Page
-import numpy as np
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
+from copy import deepcopy
+
 import matplotlib.pyplot as plt
-# import environment
+import numpy as np
+from matplotlib.dviread import Page
 from sentinelhub import (
-    SHConfig,
-    SentinelHubRequest,
+    BBox,
+    CRS,
     DataCollection,
     MimeType,
-    CRS,
-    BBox,
     SentinelHubCatalog,
-    bbox_to_dimensions
+    SentinelHubRequest,
+    SHConfig,
+    bbox_to_dimensions,
 )
-from shapely.geometry import box,Point
-# from .models import Track
-from .ingestion import AISPage
-from datetime import datetime
+import cv2
+from shapely.geometry import Point, box
+import numpy as np
+
 from core.utils import load_sentinel_creds
+from .ingestion import AISPage
 optical_eval = """
     //VERSION=3
     function setup() {
@@ -87,202 +91,11 @@ def create_sentinel_config():
     
     config.instance_id = instance_id
     return config
-# def get_true_color_image(bbox_coords, start_date, end_date, is_optical = False,min_overlap:float = 0.7):
-#     """
-#     Fetches the least cloudy true-color (RGB) Sentinel-2 image for a given
-#     bounding box and time interval.
-
-#     Args:
-#         bbox_coords (tuple): A tuple of four floats representing the bounding box
-#                              in WGS84 coordinates: (min_lon, min_lat, max_lon, max_lat).
-#         start_date (str): The start of the time interval in 'YYYY-MM-DD' format.
-#         end_date (str): The end of the time interval in 'YYYY-MM-DD' format.
-#         search_term (str): The type of satalite image, s2l2a for optical colour, s1iw SAR
-    
-#     Returns:
-#         tuple: A tuple containing:
-#             - np.ndarray: The image as a NumPy array (height, width, 3).
-#             - str: The acquisition date of the image in 'YYYY-MM-DD' format.
-#         Returns (None, None) if no images are found.
-#     """
-#     # --- Configuration for Copernicus Data Space Ecosystem ---
-    
-#     config = create_sentinel_config()
-
-#     # --- 1. Define Bounding Box and Time Interval ---
-#     bbox = BBox(bbox=bbox_coords, crs=CRS.WGS84)
-#     time_interval = (start_date, end_date)
-#     if is_optical:
-#         search_term = 's2l2a'
-#         evalscript_true_color = optical_eval
-#     else:
-#         search_term='s1iw'
-#         evalscript_true_color = SAR_eval
-#     # --- 2. Search for the least cloudy scene ---
-#     try:
-#         # Define the data collection to ensure it uses the Copernicus endpoint
-#         if is_optical:
-#             data_collection = DataCollection.SENTINEL2_L2A.define_from(
-#                 search_term, service_url="https://sh.dataspace.copernicus.eu"
-#             )
-#         else:
-#             data_collection = DataCollection.SENTINEL1_IW.define_from(
-#                 search_term, service_url="https://sh.dataspace.copernicus.eu"
-#             )
-#         catalog = SentinelHubCatalog(config=config)
-#         search_iterator = catalog.search(
-#             data_collection,
-#             bbox=bbox,
-#             time=time_interval,
-#         )
-        
-#         all_results = list(search_iterator)
-#         if not all_results:
-#             print("No scenes found for the given criteria.")
-#             return None, None
-        
-#         best_scenes_iterator = list(filter(
-#         lambda x: compute_bbox_crossover( bbox_coords,x['bbox']) > min_overlap, 
-#         all_results
-#     ))
-#         best_scenes = list(best_scenes_iterator)
-#         # print(f'Found {len(best_scenes)} scenes with > {min_overlap*100}% overlap')
-#         for best_scene in best_scenes:
-#             overlap = compute_bbox_crossover(best_scene['bbox'],bbox_coords)
-#             # print(f'Showing scene with {overlap*100}% overlap')
-#             acquisition_date = best_scene["properties"]["datetime"].split("T")[0]
-#         if is_optical:
-#             cloud_cover = best_scene["properties"]["eo:cloud_cover"]
-#         else:
-#             cloud_cover = 0
-#         # print(f"Found scene with {cloud_cover}% cloud cover on {acquisition_date}")
-
-#     except Exception as e:
-#         print(f"Error searching for scenes: {e}")
-#         return None, None
-
-
-#     # --- 3. Define the request for the true-color image ---
-#     # An evalscript to return true-color RGB bands.
-#     # It selects bands 4 (Red), 3 (Green), and 2 (Blue) and scales them.
-#     imgs = []
-#     for best_scene in best_scenes_iterator:
-
-#         acquisition_date = best_scene["properties"]["datetime"]
-#         original_bbox = bbox_coords
-#         # print(best_scene['bbox'])
-#         # print("SIZE ",bbox_to_dimensions(original_bbox, 10))
-
-#         size = bbox_to_dimensions(BBox(bbox = original_bbox, crs = CRS.WGS84), 10)
-#         # print("SIZE ",size)
-        
-#         # print(size[0]>2500)
-        
-#         if size[0] > 2500 or size[1] > 2500: # need to request smaller chunk
-#             print('bbox needs breaking down ',size,bbox)
-#             subboxes = []
-#             # print("BOUNDING BOX" ,best_scene['bbox'])
-
-#             scaleX = math.floor(size[0]/500)
-#             scaleY = math.floor(size[1]/500)
-#             try:
-#                 lon_offset = (original_bbox[2]-original_bbox[0])/(scaleX)
-#             except ZeroDivisionError:
-#                 lon_offset = 0
-#                 scaleX = 1
-#             try:
-#                 lat_offset = (original_bbox[3]-original_bbox[1])/scaleY
-#             except ZeroDivisionError:
-#                 lat_offset = 0
-#                 scaleY = 1
-#             # print(f"Scaling request down by factors {scaleX} and {scaleY}")
-            
-#             for i in range (scaleX):
-#                 for j in range(scaleY):
-#                     if lat_offset ==0:
-#                         miny = original_bbox[1]
-#                         maxy = original_bbox[3]
-#                     else:
-#                         miny = original_bbox[1] + j*lat_offset
-#                         maxy = original_bbox[1] + (j+1)*lat_offset
-                    
-#                     if lon_offset ==0:
-#                         minx = original_bbox[0]
-#                         maxx = original_bbox[2]
-#                     else:
-#                         maxx = original_bbox[0] + (i+1)*lon_offset
-#                         minx = original_bbox[0] + i*lon_offset
-#                     if maxx > original_bbox[2]:
-#                         maxx = original_bbox[2]
-#                     if maxy> original_bbox[3]:
-#                         maxy = original_bbox[3]
-#                     subboxes.append([minx,miny,maxx,maxy])
-#             print(f"Created {len(subboxes)} sub-boxes for downloading")
-#             imgs_parts = []
-#             for box in subboxes:
-#                 # return
-#                 parsed_date =  acquisition_date.split('T')[0]
-#                 # print('date ',parsed_date, 'type ',type(parsed_date))
-
-#                 part = get_true_color_image(box, parsed_date, parsed_date, is_optical=is_optical,min_overlap=0.0)
-#                 if part:
-#                     imgs_parts.append(part)
-#             return imgs_parts
-#         else:
-#             request = SentinelHubRequest(
-#                 evalscript=evalscript_true_color,
-#                 input_data=[
-#                     SentinelHubRequest.input_data(
-#                         data_collection=data_collection, # Use the defined collection
-#                         time_interval=(best_scene['properties']['datetime'], best_scene['properties']['datetime']),
-#                     )
-#                 ],
-#                 responses=[SentinelHubRequest.output_response("default", MimeType.TIFF)],
-#                 bbox=bbox,
-#                 size =bbox_to_dimensions(bbox, 10),
-#                 config=config,
-#             )
-
-#             # --- 4. Get the data ---
-#             try:
-#                 image_data = request.get_data()[0]
-#                 imgs.append({'img':image_data, 'date':acquisition_date,'bbox':best_scene['bbox']})
-#             except Exception as e:
-#                 print(f"Error downloading image data: {e}")
-#                 return None
-#         return imgs
-
-import math
-from concurrent.futures import ThreadPoolExecutor, as_completed
-
-def _single_download_request(bbox_coords, best_scene, data_collection, evalscript, config):
-    """Worker function: Downloads a single tile."""
-    from sentinelhub import BBox, CRS, SentinelHubRequest, bbox_to_dimensions
-    # print('bbox single thread ',bbox_coords)
-    bbox = BBox(bbox=bbox_coords[:4], crs=CRS.WGS84)
-    size = bbox_to_dimensions(bbox, 10)
-    
-    request = SentinelHubRequest(
-        evalscript=evalscript,
-        input_data=[
-            SentinelHubRequest.input_data(
-                data_collection=data_collection,
-                time_interval=(best_scene['properties']['datetime'], best_scene['properties']['datetime']),
-            )
-        ],
-        responses=[SentinelHubRequest.output_response("default", MimeType.TIFF)],
-        bbox=bbox,
-        size=size,
-        config=config,
-    )
-    # Return a dict so we know which bbox this data belongs to
-    return {'img': request.get_data()[0], 'date': best_scene["properties"]["datetime"], 'bbox': bbox_coords, 'row':bbox_coords[4],'col':bbox_coords[5]}
-
-def get_true_color_image(bbox_coords, start_date, end_date, is_optical=False, min_overlap:float=0.7, max_workers=8):
+def get_true_color_image(bbox_coords:tuple[float,float,float,float], start_date:str, end_date:str, is_optical:bool=False, min_overlap:float=0.7, max_workers:int=8):
     config = create_sentinel_config()
     bbox = BBox(bbox=bbox_coords, crs=CRS.WGS84)
     
-    # 1. Setup Collection and Evalscript
+
     if is_optical:
         search_term, data_col_type, evalscript = 's2l2a', DataCollection.SENTINEL2_L2A, optical_eval
     else:
@@ -291,153 +104,27 @@ def get_true_color_image(bbox_coords, start_date, end_date, is_optical=False, mi
     data_collection = data_col_type.define_from(search_term, service_url="https://sh.dataspace.copernicus.eu")
     catalog = SentinelHubCatalog(config=config)
     
-    # 2. Search Once
+
     all_results = list(catalog.search(data_collection, bbox=bbox, time=(start_date, end_date)))
-    if not all_results: return None
-    best_scenes = [s for s in all_results if compute_bbox_crossover(bbox_coords, s['bbox']) > min_overlap]
-    if not best_scenes: return None
-    
-    best_scene = best_scenes[0]
-    size = bbox_to_dimensions(bbox, 10)
-
-    # 3. Handle Tiling
-    if size[0] > 2500 or size[1] > 2500:
-        nx = math.ceil(size[0] / 2000)
-        ny = math.ceil(size[1] / 2000)
-        print(f"THREADED GRID: Dispatching {nx*ny} tiles across {max_workers} threads...")
-
-        lon_step = (bbox_coords[2] - bbox_coords[0]) / nx
-        lat_step = (bbox_coords[3] - bbox_coords[1]) / ny
-        
-        sub_boxes = []
-        for i in range(nx):
-            for j in range(ny):
-                sub_boxes.append((
-                    bbox_coords[0] + i * lon_step,
-                    bbox_coords[1] + j * lat_step,
-                    bbox_coords[0] + (i+1) * lon_step,
-                    bbox_coords[1] + (j+1) * lat_step,
-                    i,j
-                ))
-
-        # 4. The Thread Pool Execution
-        imgs = []
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # Create a dictionary to map futures to their box index (to maintain order if needed)
-            future_to_box = {
-                executor.submit(_single_download_request, box, best_scene, data_collection, evalscript, config): box 
-                for box in sub_boxes
-            }
-            
-            for future in as_completed(future_to_box):
-                try:
-                    result = future.result()
-                    imgs.append(result)
-                    print(f"  Finished {len(imgs)}/{len(sub_boxes)}...")
-                except Exception as e:
-                    print(f"  Tile download failed: {e}")
-        
-        return imgs
-
-    # Single download if small
-    return [_single_download_request(bbox_coords, best_scene, data_collection, evalscript, config)]
-import numpy as np
-
-# def stitch_tiles(tiles):
-#     """
-#     Stitches a list of dictionaries [{'img': ndarray, 'bbox': tuple}, ...] 
-#     into a single cohesive image.
-#     """
-#     if not tiles:
-#         return None
-
-#     # 1. Find the global bounds of all tiles
-#     all_bboxes = np.array([t['bbox'] for t in tiles])
-#     rows = np.max(all_bboxes[:,4])+1
-#     cols = np.max(all_bboxes[:,5])+1
-
-#     maxwidth = np.max(np.array([t['img'].shape[1] for t in tiles]))
-#     maxheight = np.max(np.array([t['img'].shape[0] for t in tiles]))
-#     print(maxwidth,maxheight)
-#     canvas = np.zeros((int(rows*maxheight),int(cols*maxwidth),2))
-#     for t in tiles:
-#         h, w = t['img'].shape[:2]
-
-#         y_start = int(t['row'] * maxheight)
-#         x_start = int(t['col'] * maxwidth)
-
-#         # Use y_start + h and x_start + w
-#         # This makes the slice on the left EXACTLY match the shape on the right
-#         canvas[y_start : y_start + h, x_start : x_start + w, :] = t['img']
-#     return canvas
-
-# def stitch_tiles(tiles):
-#     if not tiles:
-#         return None
-
-#     # 1. Filter out fails
-#     tiles = [t for t in tiles if t is not None]
-    
-#     # 2. Get Grid Counts
-#     num_rows = int(max(t['row'] for t in tiles)) + 1
-#     num_cols = int(max(t['col'] for t in tiles)) + 1
-
-#     # 3. Find Max Dimensions (Height, Width)
-#     max_h = int(max(t['img'].shape[0] for t in tiles))
-#     max_w = int(max(t['img'].shape[1] for t in tiles))
-#     channels = tiles[0]['img'].shape[2]
-    
-#     # 4. Create the Canvas
-#     canvas = np.zeros((num_rows * max_h, num_cols * max_w, channels), dtype=tiles[0]['img'].dtype)
-
-#     for t in tiles:
-#         h, w = t['img'].shape[:2]
-#         r, c = t['row'], t['col']
-        
-#         # --- THE FIX ---
-#         # Invert the row so Row 0 (South) becomes the bottom of the image
-#         actual_row = (num_rows - 1) - r 
-        
-#         y_off = actual_row * max_h
-#         x_off = c * max_w
-        
-#         # Dynamic slice to prevent broadcast errors
-#         canvas[y_off : y_off + h, x_off : x_off + w, :] = t['img']
-
-#     return canvas
-def stitch_tiles(tiles):
-    if not tiles:
+    if not all_results: 
         return None
-
-    # Filter out failed downloads
-    tiles = [t for t in tiles if t is not None]
+    best_scenes = [s for s in all_results if compute_bbox_crossover(bbox_coords, s['bbox']) > min_overlap]
+    if not best_scenes: 
+        return None
     
-    # 1. Swap the Grid Counts logic
-    # If it was rotated, what you thought were rows might be columns
-    max_idx_1 = int(max(t['row'] for t in tiles)) + 1
-    max_idx_2 = int(max(t['col'] for t in tiles)) + 1
+    # best_scene = best_scenes[0]
+    results = []
+    # for best_scene in best_scenes:
+    #     scene = SentinelScene(best_scene,bbox_coords,config,evalscript,data_collection)
+    #     # print('best scene ',best_scene)
+    #     results.append(scene)
+    results = [SentinelScene(best_scene,bbox_coords,config,evalscript,data_collection) for best_scene in best_scenes]
+    return results
 
-    # 2. Get Dimensions (H, W)
-    tile_h = int(max(t['img'].shape[0] for t in tiles))
-    tile_w = int(max(t['img'].shape[1] for t in tiles))
-    
-    # 3. Create the Canvas
-    # We swap these: use max_idx_1 for width and max_idx_2 for height
-    canvas = np.zeros((max_idx_2 * tile_h, max_idx_1 * tile_w, 2), dtype=tiles[0]['img'].dtype)
 
-    for t in tiles:
-        h, w = t['img'].shape[:2]
-        r, c = int(t['row']), int(t['col'])
-        
-        # 4. SWAP THE OFFSETS
-        # Instead of row controlling Y, let col control Y and row control X
-        y_off = c * tile_h
-        x_off = r * tile_w
-        
-        # Apply the tile using dynamic slicing to the new swapped offsets
-        canvas[y_off : y_off + h, x_off : x_off + w, :] = t['img']
 
-    return canvas
+
+
 
 def compute_bbox_area(bbox):
     """Compute area of a bounding box (lon_min, lat_min, lon_max, lat_max)."""
@@ -472,14 +159,20 @@ def get_image_AIS_pairs(target_bbox,start:datetime, end:datetime,is_optical = Fa
     for satallite in satellite_data:
         # print('bbox')
         # print(satallite)
-        bbox = satallite['bbox']
-        bbox_obj = box(*(bbox[:4]))
+        # print(satallite)
+        full_bbox = satallite.get_image_bbox() # This gives the full image bbox regardless of if it is far too big
+        # print(full_bbox)
+        box_full = box(*full_bbox)
+        target_box = box(*target_bbox)
+        bbox_obj= box_full.intersection(target_box)
         # print(bbox)
-        img = satallite['img']
-        str_date = (satallite['date'])
+        # bbox_obj = box(*bbox)
+        # print(bbox)
+        bbox = bbox_obj.bounds
+        date = satallite.get_datetime()
         # print(str_date)
         # print('str time ',str_date)
-        date = datetime.strptime(str_date, "%Y-%m-%dT%H:%M:%SZ")
+        # date = datetime.strptime(str_date, "%Y-%m-%dT%H:%M:%SZ")
 
         # print(f'date {date}')
 
@@ -488,7 +181,7 @@ def get_image_AIS_pairs(target_bbox,start:datetime, end:datetime,is_optical = Fa
         filtered_page = page.filter_bbox(bbox).filter_datetime(date)
         # print(filtered_page.full_ais_df[['Lat', 'Lon']].describe())
 
-        yield img,filtered_page,date,bbox_obj.intersection(box(*target_bbox))
+        yield satallite,filtered_page,date,bbox_obj.intersection(box(*target_bbox))
 
 def plot_image_patches(tiles):
     if not tiles:
@@ -522,6 +215,197 @@ def plot_image_patches(tiles):
 
     plt.tight_layout()
     plt.show()
+
+class SentinelScene:
+    '''This class represents a satellite photo that is taken on a specific date and bbox
+    It provides one interface to interact with single tile and multitile images.
+    It is important that some operations are remain multitile (ship detection) while others are stitched (plotting)'''
+    def __init__(self, catalog_entry, bbox_coords, config, evalscript,data_collection):
+        self.metadata = catalog_entry
+        self.bbox_coords = bbox_coords
+        self.config = config
+        self.evalscript = evalscript
+        self.data_collection = data_collection
+        self.images = None # Will hold our data later
+        
+    def download(self, max_workers=8):
+        """The user calls this exactly when they are ready for the data."""
+        size = bbox_to_dimensions(BBox(self.bbox_coords,crs=CRS.WGS84), 10)
+        
+        if size[0] > 2500 or size[1] > 2500:
+            self.images = self._download_tiled(max_workers)
+        else:
+            self.images = [self._download_single()] # Wrap in list for consistency
+            
+        return self.images
+    def _get_sentinel_bbox(self,bbox_coords):
+        return BBox(bbox=bbox_coords[:4], crs=CRS.WGS84)
+    def _get_size(self,bbox_coords):
+        bbox = self._get_sentinel_bbox(bbox_coords[:4])
+        return bbox_to_dimensions(bbox, 10)
+    def _download_tiled(self, max_workers):
+        size = self._get_size(self.bbox_coords)
+
+
+
+        nx = math.ceil(size[0] / 2000)
+        ny = math.ceil(size[1] / 2000)
+        print(f"THREADED GRID: Dispatching {nx*ny} tiles across {max_workers} threads...")
+
+        lon_step = (self.bbox_coords[2] - self.bbox_coords[0]) / nx
+        lat_step = (self.bbox_coords[3] - self.bbox_coords[1]) / ny
+        
+        sub_boxes = []
+        for i in range(nx):
+            for j in range(ny):
+                sub_boxes.append((
+                    self.bbox_coords[0] + i * lon_step,
+                    self.bbox_coords[1] + j * lat_step,
+                    self.bbox_coords[0] + (i+1) * lon_step,
+                    self.bbox_coords[1] + (j+1) * lat_step,
+                    i,j
+                ))
+
+
+        imgs = []
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+
+            future_to_box = {
+                executor.submit(self._single_download_request, box): box 
+                for box in sub_boxes
+            }
+            
+            for future in as_completed(future_to_box):
+                try:
+                    result = future.result()
+                    imgs.append(result)
+                    print(f"  Finished {len(imgs)}/{len(sub_boxes)}...")
+                except Exception as e:
+                    print(f"  Tile download failed: {e}")
+        return imgs
+    def _download_single(self):
+        imgs = [self._single_download_request(self.bbox_coords)]
+        return imgs
+    def _single_download_request(self,bbox_coords):
+        """Worker function: Downloads a single tile."""
+        # print('bbox single thread ',bbox_coords)
+        size = self._get_size(bbox_coords)
+        
+        request = SentinelHubRequest(
+            evalscript=self.evalscript,
+            input_data=[
+                SentinelHubRequest.input_data(
+                    data_collection=self.data_collection,
+                    time_interval=(self.metadata['properties']['datetime'], self.metadata['properties']['datetime']),
+                )
+            ],
+            responses=[SentinelHubRequest.output_response("default", MimeType.TIFF)],
+            bbox=self._get_sentinel_bbox(bbox_coords),
+            size=size,
+            config=self.config,
+        )
+
+        return {'img': request.get_data()[0], 'date': self.metadata["properties"]["datetime"], 'bbox': bbox_coords[:4], 'row':bbox_coords[4],'col':bbox_coords[5]}
+    def stitch(self):
+        
+        """Stitches the downloaded tiles into a single seamless numpy array."""
+        if not self.images:
+            print("No images downloaded yet. Call download() first.")
+            return None
+            
+
+        if len(self.images) == 1:
+            return self.images[0]['img']
+
+
+        # 'i' (longitude/cols) as 'row', 'j' (latitude/rows) as 'col'
+        nx = max(tile['row'] for tile in self.images) + 1
+        ny = max(tile['col'] for tile in self.images) + 1
+
+
+        grid = [[None for _ in range(nx)] for _ in range(ny)]
+
+        for tile in self.images:
+            i = tile['row'] # Longitude step (X-axis)
+            j = tile['col'] # Latitude step (Y-axis)
+            
+            # Flip the geographic Y-axis to match the Image Y-axis
+            img_row = ny - 1 - j 
+            img_col = i
+            
+            grid[img_row][img_col] = tile['img']
+
+        stitched_rows = []
+        for r in range(ny):
+            # 1. Find the minimum height among all tiles in this specific row
+            min_height = min(img.shape[0] for img in grid[r])
+            
+            # 2. Crop all tiles in this row to that exact minimum height
+            # We use the ellipsis (...) so this works for both 2D and 3D arrays!
+            cropped_tiles = [img[:min_height, ...] for img in grid[r]]
+            
+            # 3. Stitch tiles left-to-right to form a complete row
+            row_image = np.concatenate(cropped_tiles, axis=1) 
+            stitched_rows.append(row_image)
+            
+
+        min_width = min(row_img.shape[1] for row_img in stitched_rows)
+        cropped_rows = [row_img[:, :min_width, ...] for row_img in stitched_rows]
+
+
+        final_image = np.concatenate(cropped_rows, axis=0) 
+        
+        return final_image
+    
+    def plot_points(self,points:list[Point],radius = 10,bgr_color = (255, 0, 0),thickness = 10):
+        mod_scene = deepcopy(self)
+        for point in points:
+            subimg_index = None
+            for i,img in enumerate(mod_scene.images):
+                if box(*img['bbox']).contains(point) == True: # This may change with a new class subimage
+                    subimg_index = i
+                    print('plotting in image ',i)
+                    break
+                
+            if subimg_index == None:
+                return None # maybe raise an except
+            min_lon, min_lat, max_lon, max_lat = mod_scene.images[subimg_index]['bbox']
+            img_height, img_width = mod_scene.images[subimg_index]['img'].shape[:2] # height is shape[0], width is shape[1]
+
+            point_lon = point.x
+            point_lat = point.y
+
+            # 2. X Pixel (Columns: Left to Right)
+            # Fraction of the way across the longitude range * Image Width
+            lon_fraction = (point_lon - min_lon) / (max_lon - min_lon)
+            pixel_x = int(lon_fraction * img_width)
+
+            # 3. Y Pixel (Rows: Top to Bottom) -> THE FLIPPED AXIS
+            # Fraction of the way DOWN from the max_lat (Northern edge) * Image Height
+            lat_fraction = (max_lat - point_lat) / (max_lat - min_lat)
+            pixel_y = int(lat_fraction * img_height)
+            print(f'circle at {pixel_x},{pixel_y}')
+            cv2.circle(
+                        mod_scene.images[subimg_index]['img'], 
+                        (pixel_x, pixel_y), # (x, y) center
+                        radius=radius, 
+                        color=bgr_color, 
+                        thickness=thickness
+                    )
+        return mod_scene
+            
+
+    def get_search_bbox(self):
+        return self.bbox_coords
+    def get_image_bbox(self):
+        return self.metadata['bbox']
+    def get_datetime(self):
+        '''returns datetime obj'''
+        return datetime.strptime(self.get_string_datetime(), "%Y-%m-%dT%H:%M:%SZ")
+
+    def get_string_datetime(self):
+        return self.metadata['properties']['datetime']
+
 if __name__ == '__main__':
     # --- Example Usage ---
     # Bounding box for the area around the Golden Gate Bridge, San Francisco

@@ -28,5 +28,4 @@ def get_data_path()->PosixPath:
     if is_relative:
         return root_dir/path
     return Path(path)
-if __name__ == '__main__':
-    print(get_data_path())
+

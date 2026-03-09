@@ -4,4 +4,4 @@ local:
 remote: 
   data_path: /scratch/lf507/dissertation/data
   is_relative: False
-current_sys: remote
+current_sys: local

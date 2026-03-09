@@ -4,10 +4,12 @@ import json
 from pathlib import Path
 from datetime import datetime as dt
 from typing import Sequence
+import copy
+from typing import Optional
 # from matplotlib.path import Path as MplPath
 import pandas as pd
 import numpy as np
-
+from shapely.geometry import box,Point
 from .models import Track
 from .utils import get_data_path
 
@@ -44,7 +46,7 @@ class AISPage:
         '''returns full AIS pings for each vessel in the page as a dict of lists of dicts
          :return: dict mapping mmsi to list of pings
          :rtype: dict'''
-        mmsi_ping_map = {mmsi:ship_data.sort_values('DTG').to_dict(orient='records') for mmsi, ship_data in self.full_ais_df.groupby('MMSI')}
+        mmsi_ping_map = {mmsi:ship_data.sort_values(by='DTG').to_dict(orient='records') for mmsi, ship_data in self.full_ais_df.groupby('MMSI')}
         return mmsi_ping_map
         
     def load_ais(self,csv_path:str):
@@ -93,7 +95,7 @@ class AISPage:
         :rtype: Track
         '''
         for mmsi, group_df in self.grouped_data:
-            yield Track(mmsi, group_df)
+            yield Track(mmsi, group_df.to_frame())
     def get_paths(self):
         '''
         Returns a dictionary mapping MMSI to Track objects for all ships in the AIS data. Used for API calls.
@@ -109,44 +111,67 @@ class AISPage:
 
         :param function: Description
         '''
-        function(self.full_ais_df)
+        self.full_ais_df = function(self.full_ais_df)
 
         return self  # allow chaining
-    def filter_bbox(self,bbox:Sequence[float]):
-        '''
-        Filters the AIS data to only include points within the bounding box.
-        
-        :param bbox: A tuple (min_lon, min_lat, max_lon, max_lat)
-        '''
-        min_lon, min_lat, max_lon, max_lat,_,_ = bbox
-        self.full_ais_df = self.full_ais_df[
-            (self.full_ais_df['Lon'] >= min_lon) &
-            (self.full_ais_df['Lon'] <= max_lon) &
-            (self.full_ais_df['Lat'] >= min_lat) &
-            (self.full_ais_df['Lat'] <= max_lat)
+    def filter_bbox(self, bbox: Sequence[float]) -> "AISPage":
+        # 1. Create a clone of the current object
+        new_page = copy.copy(self)
+        print(f'FILTERING WITH BBOX',bbox)
+        # 2. Filter the dataframe ON THE CLONE
+        min_lon, min_lat, max_lon, max_lat = bbox
+        new_page.full_ais_df = self.full_ais_df[
+            (self.full_ais_df['Lon'].astype(float) >= min_lon) &
+            (self.full_ais_df['Lon'].astype(float) <= max_lon) &
+            (self.full_ais_df['Lat'].astype(float) >= min_lat) &
+            (self.full_ais_df['Lat'].astype(float) <= max_lat)
         ]
-        return self  # Allow chaining
-    def filter_datetime(self,start:dt,end:dt):
-        '''
-        Filters the AIS data to only include points within the datetime range.
         
-        :param start: Start datetime
-        :param end: End datetime
-        '''
-        self.full_ais_df = self.full_ais_df[
-            (self.full_ais_df['DTG'] >= start) &
-            (self.full_ais_df['DTG'] <= end)
-        ]
-        return self  # Allow chaining
-    def filter_datetime(self,end:dt):
-        '''
-        Filters the AIS data to only include points before the datetime.
+        # 3. Return the clone so you can chain it
+        return new_page
+    # def filter_datetime(self,start:dt,end:dt):
+    #     '''
+    #     Filters the AIS data to only include points within the datetime range.
         
-        :param end: End datetime
+    #     :param start: Start datetime
+    #     :param end: End datetime
+    #     '''
+    #     self.full_ais_df = self.full_ais_df[
+    #         (self.full_ais_df['DTG'] >= start) &
+    #         (self.full_ais_df['DTG'] <= end)
+    #     ]
+    #     return self  # Allow chaining
+    # def filter_datetime(self,end:dt):
+    #     '''
+    #     Filters the AIS data to only include points before the datetime.
+        
+    #     :param end: End datetime
+    #     '''
+    #     self.full_ais_df = self.full_ais_df[
+    #         (self.full_ais_df['DTG'] <= end)
+    #     ]
+    #     return self  # Allow chaining
+    def filter_datetime(self, end: dt, start: Optional[dt] = None) -> "AISPage":
         '''
-        self.full_ais_df = self.full_ais_df[
-            (self.full_ais_df['DTG'] <= end)
-        ]
-        return self  # Allow chaining
+        Filters the AIS data to only include points before the end datetime.
+        If start is provided, filters between start and end.
+        '''
+        new_page = copy.copy(self)
+        
+        # 1. Always filter by the end date
+        mask = (new_page.full_ais_df['DTG'] <= end)
+        
+        # 2. If a start date was provided, add it to the filter
+        if start is not None:
+            mask = mask & (new_page.full_ais_df['DTG'] >= start)
+            
+        # 3. Apply the mask
+        new_page.full_ais_df = new_page.full_ais_df[mask]
+        
+        return new_page
+
     def __len__(self):
         return self.full_ais_df.size
+    def __str__(self):
+        return str(self.full_ais_df)
+    
