@@ -10,7 +10,7 @@ import numpy as np
 import rasterio
 from flask import Flask, jsonify, render_template, request, send_file
 from PIL import Image
-import pandas as pd 
+import pandas as pd
 
 from .serialisers import SentinelWebSerialiser
 from core.predictors import CVKF
@@ -20,7 +20,8 @@ from core.utils import parse_datetime_to_str
 from pathlib import Path
 current_dir = Path(__file__).resolve().parent
 parent_dir = current_dir.parent
-from core.sentinel_downloader import get_true_color_image
+
+from core.predictors import CVKF
 from ultralytics import YOLO
 model = YOLO('./models/runs/detect/good_hp_run2/weights/best.pt')
 
@@ -90,37 +91,58 @@ def get_images():
     # TODO re-enable this endpoint
     data = request.get_json()
     bbox = data["bbox"]
-    start_date = datetime.fromisoformat(data["start_date"])
+    print(data["start_date"])
+    try:
+        start_date = datetime.fromisoformat(data["start_date"])
+    except ValueError:
+        # Handle ISO format with 'Z' suffix (e.g., "2023-06-03T18:07:02.000Z")
+        try:
+            start_date = datetime.strptime(data["start_date"], '%Y-%m-%dT%H:%M:%S.%fZ')
+        except ValueError:
+            # Fallback: try without milliseconds
+            start_date = datetime.strptime(data["start_date"].replace('Z', ''), '%Y-%m-%dT%H:%M:%S')
     min_lon = min(point[1] for point in bbox)
     max_lon = max(point[1] for point in bbox)
     min_lat = min(point[0] for point in bbox)
     max_lat = max(point[0] for point in bbox)
     bbox_list = [min_lon, min_lat, max_lon, max_lat]
-    end_date = datetime.fromisoformat(data["end_date"])
+    # end_date = datetime.fromisoformat(data["end_date"])
     # two_weeks_before = start_date - timedelta(weeks=2)
     two_weeks_after = parse_datetime_to_str(start_date + timedelta(weeks=2))
-    start_date = parse_datetime_to_str(start_date)
-
-    pair = list(get_image_AIS_pairs(bbox_list,start_date,two_weeks_after))[0] # we want the one closest to the start date
-    dt = pd.Timedelta(minutes=59) # time between ais and sat, prolly make adjustable in future
-    target = pd.to_datetime(pair[2])
-    scene = pair[0]
-    scene.download()
-    pair_df = pair[1].get_full_df()
-    rows = pair_df[(pair_df['DTG'] - target).abs()<dt]
+    two_weeks_before = parse_datetime_to_str(start_date - timedelta(weeks=2))
+    # start_date = parse_datetime_to_str(start_date)
+    pairs = list(get_image_AIS_pairs(bbox_list,two_weeks_before,two_weeks_after))
+    dates = [p.get_datetime() for p in pairs]
+    min_index = int(np.argmin([abs((date - start_date).total_seconds()) for date in dates]))
+    print(f'MIN INDEX :{min_index} length: {len(pairs)}')
+    pair = pairs[min_index] # we want the one closest to the start date
+    dt = pd.Timedelta(minutes=3) # time between ais and sat, prolly make adjustable in future
+    pair.download()
+    rows = pair.get_ais_msgs_within_dt(dt)
     print(len(rows))
     mmsis = list(set(rows['MMSI'])) # all unique mmsi
-    pings = []
+    pings_in_dt = []
     for mmsi in mmsis:
         msg = rows[rows['MMSI'] == mmsi].iloc[0] # if there is more than 1, they are very close together so it doesnt matter
         coord = [float(msg['Lat']),float(msg['Lon'])]
-        pings.append({'mmsi':mmsi, 'coord':coord})
+        pings_in_dt.append({'mmsi':mmsi, 'coord':coord})
     serialiser = SentinelWebSerialiser('./web/static/img_cache','/static/img_cache')
-    web_payload = serialiser.serialise(scene)
+    web_payload = serialiser.serialise(pair.get_scene())
 
-    web_payload['pings'] = pings
-    ai_pings = scene.detect_vessels(model)
+    predictor = CVKF(None)
+    prediction = pair.predict_positions_to_sat_time(predictor)
+    ai_pings = pair.detect_vessels(model)
+    # print([track.get_latest_msg_timestamp() for track in pair.get_page().get_all_tracks()])
+    all_pings = [{'mmsi':track.mmsi,'coord':[track[-1]['Lat'],track[-1]['Lon']]} for track in pair.get_page().get_all_tracks()]
+    print(all_pings)
+    # we need to remove any tracks that dont intersect with or have a prediction that sits in the bbox
+    web_payload['pings'] = all_pings
+    web_payload['catalogue'] = dates
+    # load a predictor TODO make multiple predictors selectable
+
+
     web_payload['ai_pings']=ai_pings
+    web_payload['path_preds']=prediction
     print(f'AI found {len(ai_pings)} vessels')
     return jsonify(web_payload)
 

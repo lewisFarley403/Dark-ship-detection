@@ -23,7 +23,7 @@ research/
 models/
 runs/
 static/img_cache/
-web/static/img_cache/# huge amount of data in img_cache
+web/static/img_cache/
 tests/
 #temp
 # Ignore specific large files or temporary dumps

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from abc import ABC, abstractmethod
 from math import cos, pi, sin
-
+from pathlib import Path
 import numpy as np
 
 from filterpy.kalman import KalmanFilter
@@ -133,7 +133,8 @@ class CVKF(KFPredictor):
         :param page: AISPage object
         '''
         super().__init__(page)
-        with open('../bestCVKF.json') as f:
+        current_dir = Path(__file__).parent
+        with open(current_dir.parent /'bestCVKF.json') as f:
             self.best_params = json.load(f)
     def get_transition_matrix(self,dt:float):
         '''

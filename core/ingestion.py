@@ -20,7 +20,7 @@ class AISPage:
     '''
     Represents a hour of AIS data for a specific datetime.
     '''
-    def __init__(self,datetime:dt):
+    def __init__(self,datetime:dt = None, file_path:Path = None):
         '''
         Docstring for __init__
         
@@ -28,13 +28,25 @@ class AISPage:
         :type datetime: dt object
         '''
         current_file_dir = Path(__file__).resolve().parent
-        
+        if datetime == None and file_path == None:
+            raise TypeError("Please pass a datetime or a file path")
+        if datetime != None and file_path != None:
+            raise TypeError("Please only request a datetime or a path")
         self.AIS_DATA_PATH = get_data_path() / 'AIS'
         self.headers = self.get_headers()
-        self.datetime = datetime
-        self.csv_path = self.get_csv_dir()
+        if datetime != None:
+            self.datetime = datetime
+            self.csv_path = self.get_csv_dir()
+        else:
+            self.csv_path = file_path
         self.full_ais_df = self.load_ais(self.csv_path)
-        self.grouped_data = self.full_ais_df.groupby('MMSI')
+
+        self.create_grouped_data()
+    def create_grouped_data(self):
+        self.grouped_data = self.full_ais_df.groupby('MMSI') 
+    def set_ais_df(self,df:pd.DataFrame):
+        self.full_ais_df = df
+        self.create_grouped_data()
     def get_full_df(self):
         '''
         Returns the full AIS dataframe for the page.
@@ -95,7 +107,8 @@ class AISPage:
         :rtype: Track
         '''
         for mmsi, group_df in self.grouped_data:
-            yield Track(mmsi, group_df.to_frame())
+            # yield Track(mmsi, group_df.to_frame())
+            yield Track(mmsi, group_df)
     def get_paths(self):
         '''
         Returns a dictionary mapping MMSI to Track objects for all ships in the AIS data. Used for API calls.
@@ -117,17 +130,36 @@ class AISPage:
     def filter_bbox(self, bbox: Sequence[float]) -> "AISPage":
         # 1. Create a clone of the current object
         new_page = copy.copy(self)
-        print(f'FILTERING WITH BBOX',bbox)
+        # print(f'FILTERING WITH BBOX',bbox)
         # 2. Filter the dataframe ON THE CLONE
         min_lon, min_lat, max_lon, max_lat = bbox
-        new_page.full_ais_df = self.full_ais_df[
+        new_page.set_ais_df(self.full_ais_df[
             (self.full_ais_df['Lon'].astype(float) >= min_lon) &
             (self.full_ais_df['Lon'].astype(float) <= max_lon) &
             (self.full_ais_df['Lat'].astype(float) >= min_lat) &
             (self.full_ais_df['Lat'].astype(float) <= max_lat)
-        ]
+        ])
         
         # 3. Return the clone so you can chain it
+        return new_page
+    def remove_ais_in_bbox(self, bbox: Sequence[float]) -> "AISPage":
+        # 1. Create a clone of the current object
+        new_page = copy.copy(self)
+        # print(bbox)
+        # bbox=[bbox[1],bbox[0],bbox[3],bbox[2]]
+        # 2. Get the index labels of the rows that are INSIDE the box
+        rows_to_remove = self.filter_bbox(bbox).full_ais_df.index
+        # print(f'removing {len(rows_to_remove)}')
+        # 3. Drop those indices from the dataframe
+        new_page.set_ais_df(self.full_ais_df.drop(index=rows_to_remove))
+        
+        return new_page
+    def remove_msgs_by_MMSI(self,MMSI):
+        mmsi = str(MMSI)
+        new_page = copy.copy(self)
+
+        rows_to_remove = self.full_ais_df[self.full_ais_df['MMSI'] == mmsi].index
+        new_page.set_ais_df(self.full_ais_df.drop(index=rows_to_remove))
         return new_page
     # def filter_datetime(self,start:dt,end:dt):
     #     '''
@@ -160,16 +192,16 @@ class AISPage:
         
         # 1. Always filter by the end date
         mask = (new_page.full_ais_df['DTG'] <= end)
-        
+        print(mask)
         # 2. If a start date was provided, add it to the filter
         if start is not None:
             mask = mask & (new_page.full_ais_df['DTG'] >= start)
             
         # 3. Apply the mask
         new_page.full_ais_df = new_page.full_ais_df[mask]
-        
+        new_page.grouped_data = new_page.full_ais_df.groupby('MMSI')  # <-- This is critical!
         return new_page
-
+    
     def __len__(self):
         return self.full_ais_df.size
     def __str__(self):

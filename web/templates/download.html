@@ -9,6 +9,9 @@
 {% block header_title %}🌍 Sentinel-2 Image Fetcher{% endblock %}
 
 {% block controls %}
+  <div class="loading-overlay" id="loading-overlay">
+    <div class="spinner"></div>
+  </div>
   <div class="date-group">
     <label for="start-date">Start Date:</label>
     <input type="date" id="start-date" required />
@@ -20,11 +23,20 @@
   </div>
 
   <button id="fetch-btn">Fetch Images</button>
+  <button id = 'temp-wipe-test'>Wipe test temp</button>
 {% endblock %}
-
+{%block side_panel%}
+<div id = 'sidepanel'>
+    <h2>Settings</h2>
+    <input id = ''/>
+</div>
+{%endblock%}
 {% block output %}
-  <div id="output"></div>
-  <p><time id="datetime">Independence day</time></p>
+  <div id="output">
+    <p id = 'move-earlier'> < </p>
+    <p><time id="datetime"></time></p>
+    <p id = 'move-later'>></p>
+  </div>
 {% endblock %}
 
 {% block scripts_extra %}

@@ -3,6 +3,7 @@ import math
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from copy import deepcopy
+import random 
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -21,9 +22,11 @@ from ultralytics import YOLO
 import cv2
 from shapely.geometry import Point, box
 import numpy as np
+import pandas as pd
 
 from core.utils import load_sentinel_creds
 from .ingestion import AISPage
+from .predictors import PathPredictor
 optical_eval = """
     //VERSION=3
     function setup() {
@@ -119,7 +122,7 @@ def get_true_color_image(bbox_coords:tuple[float,float,float,float], start_date:
     results = []
     # for best_scene in best_scenes:
     #     scene = SentinelScene(best_scene,bbox_coords,config,evalscript,data_collection)
-    #     # print('best scene ',best_scene)
+
     #     results.append(scene)
     results = [SentinelScene(best_scene,bbox_coords,config,evalscript,data_collection) for best_scene in best_scenes]
     return results
@@ -148,76 +151,6 @@ def compute_bbox_crossover(img, bbox):
     total_area = poly1.area
 
     return overlap_area / total_area
-
-def get_image_AIS_pairs(target_bbox,start:datetime, end:datetime,is_optical = False,min_overlap = 0.7):
-    '''
-    Creates a list of all satellite images between the datetimes and the corresponding AIS trackd
-    
-    :param start: Description
-    :type start: Datetime
-    :param end: Description
-    :type end: Datetime
-    '''
-    satellite_data = get_true_color_image(target_bbox,start,end,is_optical=is_optical,min_overlap=min_overlap)
-    for satallite in satellite_data:
-        # print('bbox')
-        # print(satallite)
-        # print(satallite)
-        full_bbox = satallite.get_image_bbox() # This gives the full image bbox regardless of if it is far too big
-        # print(full_bbox)
-        box_full = box(*full_bbox)
-        target_box = box(*target_bbox)
-        bbox_obj= box_full.intersection(target_box)
-        # print(bbox)
-        # bbox_obj = box(*bbox)
-        # print(bbox)
-        bbox = bbox_obj.bounds
-        date = satallite.get_datetime()
-        # print(str_date)
-        # print('str time ',str_date)
-        # date = datetime.strptime(str_date, "%Y-%m-%dT%H:%M:%SZ")
-
-        # print(f'date {date}')
-
-        page = AISPage(date)
-
-        filtered_page = page.filter_bbox(bbox).filter_datetime(date)
-        # print(filtered_page.full_ais_df[['Lat', 'Lon']].describe())
-
-        yield satallite,filtered_page,date,bbox_obj.intersection(box(*target_bbox))
-
-def plot_image_patches(tiles):
-    if not tiles:
-        print("No tiles to plot!")
-        return
-
-    num_tiles = len(tiles)
-    cols = 4  # Set how many tiles per row in the plot
-    rows = math.ceil(num_tiles / cols)
-
-    fig, axes = plt.subplots(rows, cols, figsize=(20, rows * 4))
-    axes = axes.flatten() # Flatten to 1D to loop easily
-
-    for i, t in enumerate(tiles):
-        ax = axes[i]
-        # SAR Data: Display VV channel (index 0) and clip for contrast
-        # clipping at -25 to 0 dB makes features (ships/land) visible
-        img_data = np.clip(t['img'][:, :, 0], -25, 0)
-        # img_data = t['img'][:, :, 0]
-        
-        ax.imshow(img_data, cmap='gray')
-        
-        # Display BBox and Grid Index
-        bbox_str = ", ".join([f"{c:.3f}" for c in t['bbox'][:4]])
-        ax.set_title(f"Row: {t['row']}, Col: {t['col']}\nBBox: [{bbox_str}]", fontsize=10)
-        ax.axis('off')
-
-    # Hide any unused subplots
-    for j in range(i + 1, len(axes)):
-        axes[j].axis('off')
-
-    plt.tight_layout()
-    plt.show()
 
 class SentinelScene:
     '''This class represents a satellite photo that is taken on a specific date and bbox
@@ -291,7 +224,7 @@ class SentinelScene:
         return imgs
     def _single_download_request(self,bbox_coords):
         """Worker function: Downloads a single tile."""
-        # print('bbox single thread ',bbox_coords)
+
         size = self._get_size(bbox_coords)
         
         request = SentinelHubRequest(
@@ -436,6 +369,158 @@ class SentinelScene:
 
     def get_string_datetime(self):
         return self.metadata['properties']['datetime']
+class AIS_img_pair:
+    def __init__(self,scene: SentinelScene, AIS:AISPage,bbox):
+        '''
+        datetime is the datetime of the sentinel image
+        '''
+        self.scene = scene
+        self.page = AIS
+        self.bbox = bbox
+
+    def get_datetime(self):
+        return self.scene.get_datetime()
+    def get_bbox(self):
+        return self.bbox
+    def get_page(self):
+        return self.page
+    def get_scene(self):
+        return self.scene
+    def set_page(self,page:AISPage) -> None:
+        page.create_grouped_data()
+        self.page = page
+    def download(self):
+        self.scene.download()
+    def detect_vessels(self,model):
+        return self.scene.detect_vessels(model)
+    def remove_msgs_by_MMSI(self,MMSI)-> AISPage:
+        return self.page.remove_msgs_by_MMSI(MMSI)
+    def filter_msgs_by_satellite_bbox(self):
+        new_pair = deepcopy(self)
+        bbox = self.get_bbox()
+        print(bbox)
+        filtered_page = self.page.filter_bbox(bbox)
+        new_pair.set_page(filtered_page)
+
+        return new_pair
+    
+
+    def get_ais_msgs_within_dt(self, time_delta: pd.Timedelta):
+        target = pd.to_datetime(self.get_datetime())
+        pair_df = self.page.get_full_df()
+        rows = pair_df[(pair_df['DTG'] - target).abs()<time_delta]
+        return rows
+    
+    def remove_path_with_ground_truth(self,target:datetime,time_delta: pd.Timedelta,percentage_removed:float):
+        if percentage_removed >1:
+            raise ValueError('percentage has to be between 0 and 1')
+        ground_truths = self.get_ais_msgs_within_dt(target,time_delta)
+        ground_truth_mmsis = set(list(ground_truths['MMSI']))
+        filtered_truth_mmsis = [mmsi for mmsi in ground_truth_mmsis if random.uniform(0, 1) > percentage_removed]
+        filtered_page = self.page.filter_cols(lambda df: df[df['mmsi'].isin(filtered_truth_mmsis)])
+
+        return AIS_img_pair(self.scene,filtered_page,self.datetime,self.bbox)
+    
+    def predict_positions_to_sat_time(self, predictor_instance: PathPredictor):
+        '''
+        Predict vessel positions from this AIS page to a target datetime using a PathPredictor instance.
+        
+        :param target_datetime: The datetime to predict to (datetime or str)
+        :param predictor_instance: An instance of PathPredictor (e.g., CVKF, linear_motion)
+        :return: Dictionary mapping MMSI to predicted [lat, lon]
+        '''
+
+        predictions = {}
+
+        for track in self.page.get_all_tracks():
+            dt = abs((track.get_latest_msg_timestamp() - self.get_datetime()).total_seconds())
+            try:
+                pred = predictor_instance.predict_with_best(track, dt)
+                predictions[track.mmsi] = pred
+            except Exception as e:
+                print(f"Prediction failed for MMSI {track.mmsi}: {e}")
+                predictions[track.mmsi] = None
+        return predictions
+def get_image_AIS_pairs(target_bbox,start:datetime, end:datetime,is_optical = False,min_overlap = 0.7):
+    '''
+    Creates a list of all satellite images between the datetimes and the corresponding AIS trackd
+    
+    :param start: Description
+    :type start: Datetime
+    :param end: Description
+    :type end: Datetime
+    '''
+    satellite_data = get_true_color_image(target_bbox,start,end,is_optical=is_optical,min_overlap=min_overlap)
+    for satallite in satellite_data:
+
+
+
+        full_bbox = satallite.get_image_bbox() # This gives the full image bbox regardless of if it is far too big
+
+
+
+        box_full = box(*full_bbox)
+        target_box = box(*target_bbox)
+        bbox_obj= box_full.intersection(target_box)
+
+
+        # bbox_obj = box(*bbox)
+
+        bbox = bbox_obj.bounds
+        date = satallite.get_datetime()
+
+
+        # date = datetime.strptime(str_date, "%Y-%m-%dT%H:%M:%SZ")
+
+
+        try:
+            page = AISPage(date)
+        except FileNotFoundError:
+            break
+        
+        intersected_bbox = bbox_obj.intersection(box(*target_bbox))
+
+
+        filtered_page = page.filter_datetime(date)# we dont want to filter the page here bc what if a vessel that is not in the bbox is predicted to enter the bbox? this needs to be filtered at the time of the classification
+
+
+        
+        yield AIS_img_pair(satallite,filtered_page,bbox)
+
+def plot_image_patches(tiles):
+    if not tiles:
+        print("No tiles to plot!")
+        return
+
+    num_tiles = len(tiles)
+    cols = 4  # Set how many tiles per row in the plot
+    rows = math.ceil(num_tiles / cols)
+
+    fig, axes = plt.subplots(rows, cols, figsize=(20, rows * 4))
+    axes = axes.flatten() # Flatten to 1D to loop easily
+
+    for i, t in enumerate(tiles):
+        ax = axes[i]
+        # SAR Data: Display VV channel (index 0) and clip for contrast
+        # clipping at -25 to 0 dB makes features (ships/land) visible
+        img_data = np.clip(t['img'][:, :, 0], -25, 0)
+        # img_data = t['img'][:, :, 0]
+        
+        ax.imshow(img_data, cmap='gray')
+        
+        # Display BBox and Grid Index
+        bbox_str = ", ".join([f"{c:.3f}" for c in t['bbox'][:4]])
+        ax.set_title(f"Row: {t['row']}, Col: {t['col']}\nBBox: [{bbox_str}]", fontsize=10)
+        ax.axis('off')
+
+    # Hide any unused subplots
+    for j in range(i + 1, len(axes)):
+        axes[j].axis('off')
+
+    plt.tight_layout()
+    plt.show()
+
+
 
 if __name__ == '__main__':
     # --- Example Usage ---
@@ -449,10 +534,10 @@ if __name__ == '__main__':
     end_time = "2023-06-10"
     # data = get_image_AIS_pairs(golden_gate_bbox,start_time,end_time)
     # d = next(data)
-    # print(len(list(d[1].get_all_tracks())))
-    # print(d[-2])
-    # print(d[-1])
-    # print(d[0].shape)
+
+
+
+
     # plt.imshow(d[0][:,:,0])
 
     # plt.show()
@@ -467,11 +552,11 @@ if __name__ == '__main__':
     # plt.imshow(big[:, :, 0], cmap='gray')    
     plt.show()
 
-    # print(f"Fetching image for bbox {golden_gate_bbox} between {start_time} and {end_time}")
+
     
     # # Fetch the image and date
     # true_color_image = get_true_color_image(golden_gate_bbox, start_time, end_time,is_optical=False)
-    # print(true_color_image[0][0].shape)
+
     # date_taken = true_color_image[0][-1]
 
     # # If successful, display the image

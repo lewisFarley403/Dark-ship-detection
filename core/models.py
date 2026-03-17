@@ -203,6 +203,13 @@ class Track:
         return result
     def __len__(self)->int:
         return len(self.df['ts'])
+    def get_latest_msg_timestamp(self):
+        return list(self.df['DTG'])[-1]
+    def __str__(self):
+        return self.df
+    def __repr__(self):
+        return str(self.df)
+
 def enrich_velocity(df:pd.DataFrame)->None:
     '''
     Function that adds velocity components to a dataframe of AIS pings.

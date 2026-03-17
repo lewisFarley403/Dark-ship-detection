@@ -1,3 +1,32 @@
+/* Loading overlay styles */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(255,255,255,0.7);
+  z-index: 9999;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  pointer-events: all;
+}
+.loading-overlay.active {
+  display: flex;
+}
+.spinner {
+  border: 8px solid #f3f3f3;
+  border-top: 8px solid #2563eb;
+  border-radius: 50%;
+  width: 70px;
+  height: 70px;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
 body {
   font-family: system-ui, sans-serif;
   background: #f8fafc;
@@ -93,6 +122,8 @@ button:hover {
 #output {
   margin-top: 1rem;
   font-size: 0.95rem;
+  display: flex;
+  flex-direction: row;
 }
 
 .grayscale-satellite {

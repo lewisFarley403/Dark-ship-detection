@@ -25,8 +25,7 @@ for i,pair in enumerate(res):
     rows = pair_df[(pair_df['DTG'] - target).abs()<dt]
     pair_df ['delta'] = (pair_df['DTG'] - target).abs()
     pair_df ['delta_bool'] = (pair_df['DTG'] - target).abs()<dt
-    # print('='*10)
-    # print(pair_df['DTG'].dt.time)
+
     print(f'target {target}')
     mmsis = list(set(rows['MMSI']))
     if len(mmsis) != 0:
