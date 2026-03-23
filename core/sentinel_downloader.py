@@ -389,12 +389,12 @@ class AIS_img_pair:
     def set_page(self,page:AISPage) -> None:
         page.create_grouped_data()
         self.page = page
-    def download(self):
-        self.scene.download()
+    def download(self,max_workers=8):
+        self.scene.download(max_workers)
     def detect_vessels(self,model):
         return self.scene.detect_vessels(model)
     def remove_msgs_by_MMSI(self,MMSI)-> AISPage:
-        return self.page.remove_msgs_by_MMSI(MMSI)
+        self.page = self.page.remove_msgs_by_MMSI(MMSI)
     def filter_msgs_by_satellite_bbox(self):
         new_pair = deepcopy(self)
         bbox = self.get_bbox()
@@ -436,7 +436,7 @@ class AIS_img_pair:
             dt = abs((track.get_latest_msg_timestamp() - self.get_datetime()).total_seconds())
             try:
                 pred = predictor_instance.predict_with_best(track, dt)
-                predictions[track.mmsi] = pred
+                predictions[track.mmsi] = {'pred':pred,'uncertanty':predictor_instance.get_covar_ell()}
             except Exception as e:
                 print(f"Prediction failed for MMSI {track.mmsi}: {e}")
                 predictions[track.mmsi] = None

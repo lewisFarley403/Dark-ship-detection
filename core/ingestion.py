@@ -154,11 +154,13 @@ class AISPage:
         new_page.set_ais_df(self.full_ais_df.drop(index=rows_to_remove))
         
         return new_page
-    def remove_msgs_by_MMSI(self,MMSI):
+    def remove_msgs_by_MMSI(self, MMSI):
         mmsi = str(MMSI)
         new_page = copy.copy(self)
-
-        rows_to_remove = self.full_ais_df[self.full_ais_df['MMSI'] == mmsi].index
+        
+        # Convert MMSI column to string for comparison
+        rows_to_remove = self.full_ais_df[self.full_ais_df['MMSI'].astype(str) == mmsi].index
+        print('removing: ', len(rows_to_remove))
         new_page.set_ais_df(self.full_ais_df.drop(index=rows_to_remove))
         return new_page
     # def filter_datetime(self,start:dt,end:dt):

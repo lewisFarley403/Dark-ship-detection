@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from math import cos, pi, sin
 from pathlib import Path
 import numpy as np
+from typing import Sequence
 
 from filterpy.kalman import KalmanFilter
 from .models import Track,enrich_velocity,KNOT_TO_MPS
@@ -76,7 +77,27 @@ class KFPredictor(PathPredictor,ABC):
         self.kf = None # for storing the last kalman filter used
 
 
+    def get_covar_ell(self)->Sequence[float]:
+        '''
+        Finds the dimensions of covariance ellipse 
+        :return Width
+        :rtype: float
+        :return Height
+        :rtype: float
+        :return angle
+        :rtype: float
+        '''
 
+
+        cov = self.get_covariance()[:2, :2]
+        vals, vecs = np.linalg.eigh(cov)
+        order = vals.argsort()[::-1]
+        vals, vecs = vals[order], vecs[:, order]
+        theta = np.degrees(np.arctan2(*vecs[:, 0][::-1]))
+        
+        # 4 * sqrt for a clear 95% confidence visualization
+        width, height = 5 * np.sqrt(np.maximum(vals, 0)) 
+        return width,height,theta
     def predict(self,track:Track,dt:float,**kwargs:float)->list:
         '''
         Docstring for predict
